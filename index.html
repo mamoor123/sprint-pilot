@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SprintPilot — AI Sprint Command Center</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+</head>
+<body>
+    <!-- Command Palette (Ctrl+K) -->
+    <div class="command-palette-overlay" id="command-palette-overlay">
+        <div class="command-palette">
+            <div class="command-input-wrap">
+                <i class="fas fa-search"></i>
+                <input type="text" id="command-input" placeholder="Search stories, navigate, or type a command...">
+                <kbd>ESC</kbd>
+            </div>
+            <div class="command-results" id="command-results"></div>
+        </div>
+    </div>
+
+    <div class="app">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-icon"><i class="fas fa-rocket"></i></div>
+                <div class="brand-text">
+                    <span class="brand-name">SprintPilot</span>
+                    <span class="brand-tag">AI Sprint Center</span>
+                </div>
+            </div>
+
+            <div class="sidebar-search" id="sidebar-search-trigger">
+                <i class="fas fa-search"></i>
+                <span>Search...</span>
+                <kbd>⌘K</kbd>
+            </div>
+
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <span class="nav-label">Sprint</span>
+                    <a href="#" class="nav-link active" data-view="dashboard">
+                        <i class="fas fa-chart-pie"></i>
+                        <span>Dashboard</span>
+                    </a>
+                    <a href="#" class="nav-link" data-view="board">
+                        <i class="fas fa-columns"></i>
+                        <span>Board</span>
+                    </a>
+                    <a href="#" class="nav-link" data-view="timeline">
+                        <i class="fas fa-timeline"></i>
+                        <span>Timeline</span>
+                    </a>
+                    <a href="#" class="nav-link" data-view="backlog">
+                        <i class="fas fa-list-check"></i>
+                        <span>Backlog</span>
+                        <span class="nav-badge" id="backlog-badge">4</span>
+                    </a>
+                </div>
+                <div class="nav-section">
+                    <span class="nav-label">AI Tools</span>
+                    <a href="#" class="nav-link" data-view="ai-planner">
+                        <i class="fas fa-wand-magic-sparkles"></i>
+                        <span>AI Planner</span>
+                        <span class="nav-dot pulse"></span>
+                    </a>
+                    <a href="#" class="nav-link" data-view="risk-radar">
+                        <i class="fas fa-shield-halved"></i>
+                        <span>Risk Radar</span>
+                    </a>
+                    <a href="#" class="nav-link" data-view="standup">
+                        <i class="fas fa-robot"></i>
+                        <span>AI Standup</span>
+                    </a>
+                </div>
+                <div class="nav-section">
+                    <span class="nav-label">Team</span>
+                    <a href="#" class="nav-link" data-view="velocity">
+                        <i class="fas fa-chart-line"></i>
+                        <span>Velocity</span>
+                    </a>
+                    <a href="#" class="nav-link" data-view="workload">
+                        <i class="fas fa-users-gear"></i>
+                        <span>Workload</span>
+                    </a>
+                    <a href="#" class="nav-link" data-view="retro">
+                        <i class="fas fa-rotate-left"></i>
+                        <span>Retro</span>
+                    </a>
+                </div>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="theme-switch" id="theme-switch">
+                    <i class="fas fa-moon"></i>
+                    <div class="theme-track">
+                        <div class="theme-thumb"></div>
+                    </div>
+                    <i class="fas fa-sun"></i>
+                </div>
+                <div class="sprint-meta">
+                    <span class="sprint-meta-label">Sprint 1</span>
+                    <span class="sprint-meta-dates">Jun 18 – Jul 1</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main -->
+        <main class="main">
+            <!-- Top Bar -->
+            <header class="topbar">
+                <div class="topbar-left">
+                    <button class="hamburger" id="hamburger"><i class="fas fa-bars"></i></button>
+                    <div class="topbar-title">
+                        <h1 id="view-title">Dashboard</h1>
+                        <span class="topbar-breadcrumb" id="topbar-breadcrumb">Sprint 1 · Jun 18 – Jul 1</span>
+                    </div>
+                </div>
+                <div class="topbar-right">
+                    <div class="health-badge" id="health-badge">
+                        <div class="health-dot"></div>
+                        <span>On Track</span>
+                    </div>
+                    <button class="btn btn-ghost" id="cmd-trigger"><i class="fas fa-search"></i></button>
+                    <button class="btn btn-primary" id="add-story-btn"><i class="fas fa-plus"></i> New Story</button>
+                </div>
+            </header>
+
+            <!-- Views -->
+            <div class="content">
+                <!-- ===== DASHBOARD ===== -->
+                <section class="view active" id="view-dashboard">
+                    <div class="dash-grid">
+                        <!-- Health Score -->
+                        <div class="dash-card hero-card">
+                            <div class="hero-left">
+                                <div class="hero-score" id="sprint-score">82</div>
+                                <div class="hero-label">Sprint Health</div>
+                                <div class="hero-sub" id="sprint-health-text">On track to complete 85% of planned work</div>
+                            </div>
+                            <div class="hero-right">
+                                <canvas id="health-donut" width="140" height="140"></canvas>
+                            </div>
+                        </div>
+                        <!-- Stats Row -->
+                        <div class="dash-card stat-card">
+                            <div class="stat-icon teal"><i class="fas fa-fire"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-velocity">26</span>
+                                <span class="stat-label">Velocity (pts)</span>
+                            </div>
+                        </div>
+                        <div class="dash-card stat-card">
+                            <div class="stat-icon amber"><i class="fas fa-clock"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-days">13</span>
+                                <span class="stat-label">Days Left</span>
+                            </div>
+                        </div>
+                        <div class="dash-card stat-card">
+                            <div class="stat-icon green"><i class="fas fa-check-circle"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-done">2</span>
+                                <span class="stat-label">Completed</span>
+                            </div>
+                        </div>
+                        <div class="dash-card stat-card">
+                            <div class="stat-icon red"><i class="fas fa-triangle-exclamation"></i></div>
+                            <div class="stat-info">
+                                <span class="stat-value" id="stat-at-risk">1</span>
+                                <span class="stat-label">At Risk</span>
+                            </div>
+                        </div>
+                        <!-- Burndown -->
+                        <div class="dash-card chart-card wide">
+                            <div class="card-header">
+                                <h3>Sprint Burndown</h3>
+                                <div class="card-actions">
+                                    <span class="legend-dot ideal"></span> Ideal
+                                    <span class="legend-dot actual"></span> Actual
+                                </div>
+                            </div>
+                            <canvas id="burndown-chart" height="200"></canvas>
+                        </div>
+                        <!-- Risk Radar Mini -->
+                        <div class="dash-card">
+                            <div class="card-header">
+                                <h3><i class="fas fa-shield-halved"></i> Risk Radar</h3>
+                            </div>
+                            <div class="risk-list" id="risk-list-mini"></div>
+                        </div>
+                        <!-- Quick Wins -->
+                        <div class="dash-card">
+                            <div class="card-header">
+                                <h3><i class="fas fa-bolt"></i> Quick Wins</h3>
+                            </div>
+                            <div class="quickwins-list" id="quickwins-list"></div>
+                        </div>
+                        <!-- Recent Activity -->
+                        <div class="dash-card wide">
+                            <div class="card-header">
+                                <h3>Recent Activity</h3>
+                            </div>
+                            <div class="activity-feed" id="activity-feed"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===== BOARD ===== -->
+                <section class="view" id="view-board">
+                    <div class="board" id="board">
+                        <div class="board-col" data-status="todo">
+                            <div class="board-col-head">
+                                <span class="col-dot todo"></span>
+                                <span class="col-name">To Do</span>
+                                <span class="col-count" id="cnt-todo">0</span>
+                            </div>
+                            <div class="board-col-body" id="col-todo"></div>
+                        </div>
+                        <div class="board-col" data-status="progress">
+                            <div class="board-col-head">
+                                <span class="col-dot progress"></span>
+                                <span class="col-name">In Progress</span>
+                                <span class="col-count" id="cnt-progress">0</span>
+                            </div>
+                            <div class="board-col-body" id="col-progress"></div>
+                        </div>
+                        <div class="board-col" data-status="review">
+                            <div class="board-col-head">
+                                <span class="col-dot review"></span>
+                                <span class="col-name">Review</span>
+                                <span class="col-count" id="cnt-review">0</span>
+                            </div>
+                            <div class="board-col-body" id="col-review"></div>
+                        </div>
+                        <div class="board-col" data-status="done">
+                            <div class="board-col-head">
+                                <span class="col-dot done"></span>
+                                <span class="col-name">Done</span>
+                                <span class="col-count" id="cnt-done">0</span>
+                            </div>
+                            <div class="board-col-body" id="col-done"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===== TIMELINE ===== -->
+                <section class="view" id="view-timeline">
+                    <div class="timeline-container">
+                        <div class="timeline-header">
+                            <div class="timeline-dates" id="timeline-dates"></div>
+                        </div>
+                        <div class="timeline-body" id="timeline-body"></div>
+                    </div>
+                </section>
+
+                <!-- ===== BACKLOG ===== -->
+                <section class="view" id="view-backlog">
+                    <div class="backlog-wrap">
+                        <div class="backlog-toolbar">
+                            <input type="text" class="input" id="backlog-search" placeholder="Filter stories...">
+                            <button class="btn btn-primary" id="add-backlog-btn"><i class="fas fa-plus"></i> Add to Backlog</button>
+                        </div>
+                        <div class="backlog-list" id="backlog-list"></div>
+                    </div>
+                </section>
+
+                <!-- ===== AI PLANNER ===== -->
+                <section class="view" id="view-ai-planner">
+                    <div class="planner-grid">
+                        <div class="dash-card planner-card">
+                            <div class="card-header"><h3><i class="fas fa-wand-magic-sparkles"></i> AI Story Estimator</h3></div>
+                            <p class="card-desc">Paste a user story and get instant point estimates, complexity analysis, and breakdown suggestions.</p>
+                            <textarea class="input textarea" id="ai-story-input" placeholder="As a user, I want to reset my password so that I can regain access to my account if I forget it."></textarea>
+                            <button class="btn btn-primary" id="estimate-btn"><i class="fas fa-magic"></i> Estimate</button>
+                            <div class="ai-result" id="estimation-result"></div>
+                        </div>
+                        <div class="dash-card planner-card">
+                            <div class="card-header"><h3><i class="fas fa-calculator"></i> Sprint Capacity</h3></div>
+                            <p class="card-desc">Calculate optimal sprint load based on team velocity and availability.</p>
+                            <div class="form-grid">
+                                <div class="form-group"><label>Team Size</label><input type="number" class="input" id="cap-team" value="4" min="1"></div>
+                                <div class="form-group"><label>Avg Velocity</label><input type="number" class="input" id="cap-vel" value="26" min="1"></div>
+                                <div class="form-group"><label>Duration (days)</label><input type="number" class="input" id="cap-days" value="10" min="1"></div>
+                                <div class="form-group"><label>Availability %</label><input type="number" class="input" id="cap-avail" value="80" min="10" max="100"></div>
+                            </div>
+                            <button class="btn btn-primary" id="calc-cap-btn"><i class="fas fa-calculator"></i> Calculate</button>
+                            <div class="ai-result" id="capacity-result"></div>
+                        </div>
+                        <div class="dash-card planner-card wide">
+                            <div class="card-header"><h3><i class="fas fa-robot"></i> AI Sprint Suggestion</h3></div>
+                            <p class="card-desc">Based on your backlog and team velocity, AI suggests which stories to pull into the sprint.</p>
+                            <button class="btn btn-primary" id="suggest-btn"><i class="fas fa-wand-magic-sparkles"></i> Generate Suggestion</button>
+                            <div class="ai-result" id="suggestion-result"></div>
+                        </div>
+                        <div class="dash-card planner-card wide">
+                            <div class="card-header"><h3><i class="fas fa-clipboard-check"></i> Async Sprint Vote</h3></div>
+                            <p class="card-desc">Team members vote on backlog stories. AI aggregates votes and recommends the sprint lineup.</p>
+                            <div class="vote-list" id="vote-list"></div>
+                            <div class="ai-result" id="vote-result"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===== RISK RADAR ===== -->
+                <section class="view" id="view-risk-radar">
+                    <div class="risk-wrap">
+                        <div class="risk-summary" id="risk-summary"></div>
+                        <div class="risk-table-wrap">
+                            <table class="risk-table" id="risk-table">
+                                <thead><tr><th>Story</th><th>Risk</th><th>Issue</th><th>Suggestion</th></tr></thead>
+                                <tbody id="risk-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===== AI STANDUP ===== -->
+                <section class="view" id="view-standup">
+                    <div class="standup-wrap">
+                        <div class="dash-card standup-card">
+                            <div class="card-header"><h3><i class="fas fa-robot"></i> AI-Generated Standup</h3></div>
+                            <p class="card-desc">Based on story status changes, here's today's standup summary.</p>
+                            <button class="btn btn-primary" id="gen-standup-btn"><i class="fas fa-wand-magic-sparkles"></i> Generate Today's Standup</button>
+                            <div class="standup-output" id="standup-output"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- ===== VELOCITY ===== -->
+                <section class="view" id="view-velocity">
+                    <div class="charts-grid">
+                        <div class="dash-card chart-card"><div class="card-header"><h3>Velocity Trend</h3></div><canvas id="vel-chart"></canvas></div>
+                        <div class="dash-card chart-card"><div class="card-header"><h3>Story Distribution</h3></div><canvas id="dist-chart"></canvas></div>
+                    </div>
+                </section>
+
+                <!-- ===== WORKLOAD ===== -->
+                <section class="view" id="view-workload">
+                    <div class="workload-grid" id="workload-grid"></div>
+                </section>
+
+                <!-- ===== RETRO ===== -->
+                <section class="view" id="view-retro">
+                    <div class="retro-grid">
+                        <div class="retro-col">
+                            <div class="retro-head good"><i class="fas fa-face-smile"></i> Went Well</div>
+                            <div class="retro-body" id="retro-good"></div>
+                            <button class="btn btn-ghost btn-sm add-retro-btn" data-cat="good"><i class="fas fa-plus"></i> Add</button>
+                        </div>
+                        <div class="retro-col">
+                            <div class="retro-head bad"><i class="fas fa-face-meh"></i> Improve</div>
+                            <div class="retro-body" id="retro-bad"></div>
+                            <button class="btn btn-ghost btn-sm add-retro-btn" data-cat="bad"><i class="fas fa-plus"></i> Add</button>
+                        </div>
+                        <div class="retro-col">
+                            <div class="retro-head action"><i class="fas fa-fist-raised"></i> Actions</div>
+                            <div class="retro-body" id="retro-action"></div>
+                            <button class="btn btn-ghost btn-sm add-retro-btn" data-cat="action"><i class="fas fa-plus"></i> Add</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Side Panel (Story Detail) -->
+        <div class="side-panel" id="side-panel">
+            <div class="panel-header">
+                <h2 id="panel-title">Story Details</h2>
+                <button class="btn btn-ghost" id="panel-close"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="panel-body" id="panel-body"></div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal-overlay" id="story-modal">
+        <div class="modal">
+            <div class="modal-head"><h2 id="modal-title">New Story</h2><button class="btn btn-ghost modal-close-btn"><i class="fas fa-xmark"></i></button></div>
+            <form id="story-form">
+                <input type="hidden" id="story-id">
+                <div class="form-group"><label>Title</label><input class="input" id="story-title" required placeholder="e.g., User Authentication"></div>
+                <div class="form-group"><label>Description</label><textarea class="input textarea" id="story-desc" placeholder="As a [user], I want [feature] so that [benefit]..."></textarea></div>
+                <div class="form-row">
+                    <div class="form-group"><label>Points</label><select class="input" id="story-pts"><option>1</option><option>2</option><option selected>3</option><option>5</option><option>8</option><option>13</option><option>21</option></select></div>
+                    <div class="form-group"><label>Priority</label><select class="input" id="story-pri"><option value="critical">Critical</option><option value="high">High</option><option selected value="medium">Medium</option><option value="low">Low</option></select></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Assignee</label><select class="input" id="story-assign"></select></div>
+                    <div class="form-group"><label>Epic</label><input class="input" id="story-epic" placeholder="e.g., Auth"></div>
+                </div>
+                <div class="form-group"><label>Tags</label><input class="input" id="story-tags" placeholder="frontend, api, ux"></div>
+                <div class="form-actions"><button type="button" class="btn btn-ghost cancel-modal">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+            </form>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="retro-modal">
+        <div class="modal modal-sm">
+            <div class="modal-head"><h2>Add Note</h2><button class="btn btn-ghost modal-close-btn"><i class="fas fa-xmark"></i></button></div>
+            <form id="retro-form">
+                <input type="hidden" id="retro-id">
+                <input type="hidden" id="retro-cat">
+                <div class="form-group"><label>Note</label><textarea class="input textarea" id="retro-text" required></textarea></div>
+                <div class="form-actions"><button type="button" class="btn btn-ghost cancel-modal">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"><i class="fas fa-check-circle"></i><span id="toast-msg"></span></div>
+
+    <script src="app.js"></script>
+    <!-- Novus.ai -->
+    <script>window.novusConfig={projectId:'sprintpilot-demo',apiKey:'sprintpilot-demo'};</script>
+    <script src="https://novus.pendo.io/agent/novus-agent.min.js" async></script>
+</body>
+</html>
