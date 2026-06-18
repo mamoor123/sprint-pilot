@@ -19,6 +19,7 @@ let nid = 1, nrid = 1;
 
 // ===== INIT =====
 document.addEventListener('DOMContentLoaded', () => {
+    pendo.initialize({ visitor: { id: '' } });
     load(); initNav(); initTheme(); initBoard(); initModals(); initAI(); initCmd();
     render();
 });
