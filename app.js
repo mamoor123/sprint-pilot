@@ -109,7 +109,19 @@ function initBoard() {
                 const id = +evt.item.dataset.id;
                 const ns = evt.to.closest('.board-col').dataset.status;
                 const st = S.stories.find(s => s.id === id);
-                if (st) { st.status = ns; save(); renderBoard(); addActivity('fa-arrow-right', `<strong>You</strong> moved <strong>${st.title}</strong> to ${statusLabel(ns)}`); toast('Story moved!'); }
+                if (st) {
+                    const ps = st.status;
+                    st.status = ns; save(); renderBoard(); addActivity('fa-arrow-right', `<strong>You</strong> moved <strong>${st.title}</strong> to ${statusLabel(ns)}`); toast('Story moved!');
+                    pendo.track('story_status_changed', {
+                        storyId: st.id,
+                        title: st.title,
+                        points: st.pts,
+                        priority: st.pri,
+                        previousStatus: ps,
+                        newStatus: ns,
+                        assignee: assignName(st.assign)
+                    });
+                }
             }
         });
     });
@@ -125,7 +137,23 @@ function initModals() {
     document.querySelectorAll('.cancel-modal, .modal-close-btn').forEach(b => b.addEventListener('click', closeModals));
     document.querySelectorAll('.modal-overlay').forEach(m => m.addEventListener('click', e => { if (e.target === m) closeModals(); }));
     document.querySelectorAll('.add-retro-btn').forEach(b => b.addEventListener('click', () => openRetroModal(b.dataset.cat)));
-    document.getElementById('backlog-search').addEventListener('input', e => renderBacklog(e.target.value));
+    let _backlogSearchTimer;
+    document.getElementById('backlog-search').addEventListener('input', e => {
+        const q = e.target.value;
+        renderBacklog(q);
+        clearTimeout(_backlogSearchTimer);
+        if (q.trim()) {
+            _backlogSearchTimer = setTimeout(() => {
+                const results = S.backlog.filter(s => s.title.toLowerCase().includes(q.toLowerCase()) || (s.desc||'').toLowerCase().includes(q.toLowerCase()));
+                pendo.track('backlog_searched', {
+                    query: q.substring(0, 100),
+                    queryLength: q.length,
+                    resultsCount: results.length,
+                    totalBacklogSize: S.backlog.length
+                });
+            }, 500);
+        }
+    });
 }
 
 function openStoryModal(s, bl) {
@@ -184,10 +212,34 @@ function saveStory() {
     if (form.dataset.mode === 'edit') {
         const list = bl ? S.backlog : S.stories;
         const i = list.findIndex(x => x.id === s.id);
-        if (i >= 0) { s.status = list[i].status; list[i] = s; }
+        if (i >= 0) {
+            s.status = list[i].status; list[i] = s;
+            pendo.track('story_updated', {
+                storyId: s.id,
+                title: s.title,
+                points: s.pts,
+                priority: s.pri,
+                assignee: assignName(s.assign),
+                epic: s.epic || '',
+                tags: (s.tags || []).join(', '),
+                isBacklog: bl,
+                status: s.status
+            });
+        }
     } else {
         (bl ? S.backlog : S.stories).push(s);
         addActivity('fa-plus', `<strong>You</strong> added <strong>${s.title}</strong>`);
+        pendo.track('story_created', {
+            storyId: s.id,
+            title: s.title,
+            points: s.pts,
+            priority: s.pri,
+            assignee: assignName(s.assign),
+            epic: s.epic || '',
+            tags: (s.tags || []).join(', '),
+            destination: bl ? 'backlog' : 'sprint',
+            tagCount: (s.tags || []).length
+        });
     }
     save(); render(); closeModals(); toast(form.dataset.mode === 'edit' ? 'Updated!' : 'Added!');
 }
@@ -196,7 +248,14 @@ function saveRetro() {
     const id = document.getElementById('retro-id').value;
     const r = { id: id ? +id : nrid++, cat: document.getElementById('retro-cat').value, text: document.getElementById('retro-text').value.trim(), votes: 0 };
     if (!r.text) return;
-    S.retro.push(r); save(); renderRetro(); closeModals(); toast('Note added!');
+    S.retro.push(r);
+    pendo.track('retro_note_added', {
+        category: r.cat,
+        textLength: r.text.length,
+        totalNotesInCategory: S.retro.filter(x => x.cat === r.cat).length,
+        totalRetroNotes: S.retro.length
+    });
+    save(); renderRetro(); closeModals(); toast('Note added!');
 }
 
 // ===== AI =====
@@ -235,6 +294,13 @@ function estimate(text) {
     else if (md.some(k => w.includes(k))) { pts = 5; comp = 'Medium'; conf = 80; }
     else if (lo.some(k => w.includes(k))) { pts = 2; comp = 'Low'; conf = 85; }
     if (text.length > 200) { pts = Math.min(pts + 2, 13); conf -= 5; }
+    pendo.track('ai_story_estimated', {
+        inputLength: text.length,
+        estimatedPoints: pts,
+        complexity: comp,
+        confidenceScore: conf,
+        hasSuggestedBreakdown: pts >= 8
+    });
     let bd = '';
     if (pts >= 8) bd = `<div style="margin-top:10px"><h4>💡 Suggested Breakdown</h4>
         <div class="ai-suggest-item"><span>1. Core functionality</span><span class="story-pts">${Math.ceil(pts*0.4)} pts</span></div>
@@ -251,6 +317,16 @@ function capacity(team, vel, days, avail) {
     const total = hrs * team;
     const sug = Math.round(vel * avail / 100);
     const stories = Math.round(sug / 3);
+    pendo.track('sprint_capacity_calculated', {
+        teamSize: team,
+        avgVelocity: vel,
+        durationDays: days,
+        availabilityPercent: avail,
+        effectiveDays: eff,
+        totalCapacityHours: total,
+        suggestedPoints: sug,
+        suggestedStoryCount: stories
+    });
     return `<h4>📊 Capacity Analysis</h4>
         <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px;margin:10px 0">
         <div><div style="font-size:11px;color:var(--tx3)">Effective Days</div><span class="ai-big" style="font-size:28px">${eff}</span></div>
@@ -268,6 +344,15 @@ function suggest() {
     const sorted = [...S.backlog].sort((a,b) => ord[a.pri] - ord[b.pri]);
     let picked = [], tot = 0;
     for (const s of sorted) { if (tot + s.pts <= rem) { picked.push(s); tot += s.pts; } }
+    pendo.track('ai_sprint_suggestion_generated', {
+        avgVelocity: avg,
+        currentLoad: load,
+        remainingCapacity: rem,
+        suggestedStoryCount: picked.length,
+        suggestedTotalPoints: tot,
+        backlogSize: S.backlog.length,
+        isAtCapacity: picked.length === 0
+    });
     let h = `<h4>🚀 Sprint Suggestion</h4><div class="ai-row"><div><strong>Avg Velocity:</strong> ${avg} pts</div><div><strong>Current Load:</strong> ${load} pts</div><div><strong>Remaining:</strong> ${rem} pts</div></div>`;
     if (!picked.length) h += `<div style="color:var(--amber);margin-top:8px">⚠️ Sprint is at capacity. Finish current stories first.</div>`;
     else { h += `<div style="margin-top:8px"><strong>Suggested stories:</strong></div>`; picked.forEach(s => { h += `<div class="ai-suggest-item"><span>${s.title}</span><span class="story-pts">${s.pts} pts</span></div>`; }); h += `<div style="margin-top:6px;font-size:13px;color:var(--tx2)">Total: ${tot} pts from ${picked.length} stories</div>`; }
@@ -279,6 +364,15 @@ function standup() {
     const prog = S.stories.filter(s => s.status === 'progress');
     const todo = S.stories.filter(s => s.status === 'todo');
     const review = S.stories.filter(s => s.status === 'review');
+    const blockers = getRisks().filter(r => r.level === 'high');
+    pendo.track('ai_standup_generated', {
+        completedCount: done.length,
+        inProgressCount: prog.length,
+        inReviewCount: review.length,
+        todoCount: todo.length,
+        blockerCount: blockers.length,
+        totalStories: S.stories.length
+    });
     return `<h4>📋 Daily Standup — ${new Date().toLocaleDateString('en-US', { weekday:'long', month:'short', day:'numeric' })}</h4>
         <div class="standup-section"><div class="standup-label">✅ Completed (${done.length})</div>${done.map(s => `<div>• ${s.title} (${s.pts} pts)</div>`).join('') || '<div>None yet</div>'}</div>
         <div class="standup-section"><div class="standup-label">🔄 In Progress (${prog.length})</div>${prog.map(s => `<div>• ${s.title} — assigned to ${assignName(s.assign)}</div>`).join('') || '<div>None</div>'}</div>
@@ -336,6 +430,7 @@ function openCmd() {
     input.value = ''; input.focus(); filterCmd('');
 }
 function closeCmd() { document.getElementById('command-palette-overlay').classList.remove('open'); }
+let _cmdSearchTimer;
 function filterCmd(q) {
     const items = [
         { icon:'fa-chart-pie', text:'Dashboard', action:() => switchView('dashboard') },
@@ -356,6 +451,17 @@ function filterCmd(q) {
     const el = document.getElementById('command-results');
     el.innerHTML = filtered.map((i, idx) => `<div class="command-item${idx===0?' selected':''}" data-idx="${idx}"><i class="fas ${i.icon}"></i><span>${i.text}</span></div>`).join('');
     el.querySelectorAll('.command-item').forEach((div, idx) => div.addEventListener('click', () => { filtered[idx].action(); closeCmd(); }));
+    clearTimeout(_cmdSearchTimer);
+    if (q.trim()) {
+        _cmdSearchTimer = setTimeout(() => {
+            pendo.track('command_palette_searched', {
+                query: q.substring(0, 100),
+                queryLength: q.length,
+                resultsCount: filtered.length,
+                totalItems: items.length
+            });
+        }, 500);
+    }
 }
 
 // ===== SIDE PANEL =====
@@ -383,17 +489,56 @@ function editStory(id) {
     if (s) { closePanel(); openStoryModal(s); }
 }
 function deleteStory(id) {
+    const story = S.stories.find(x => x.id === id) || S.backlog.find(x => x.id === id);
+    const source = S.stories.some(x => x.id === id) ? 'sprint' : 'backlog';
     S.stories = S.stories.filter(x => x.id !== id);
     S.backlog = S.backlog.filter(x => x.id !== id);
+    if (story) {
+        pendo.track('story_deleted', {
+            storyId: story.id,
+            title: story.title,
+            points: story.pts,
+            priority: story.pri,
+            status: story.status || 'backlog',
+            source: source
+        });
+    }
     save(); render(); closePanel(); toast('Deleted!');
 }
 function moveToBacklog(id) {
     const i = S.stories.findIndex(x => x.id === id);
-    if (i >= 0) { const s = S.stories.splice(i, 1)[0]; delete s.status; S.backlog.push(s); save(); render(); closePanel(); toast('Moved to backlog!'); }
+    if (i >= 0) {
+        const s = S.stories.splice(i, 1)[0];
+        const ps = s.status;
+        delete s.status; S.backlog.push(s);
+        pendo.track('story_moved_to_backlog', {
+            storyId: s.id,
+            title: s.title,
+            points: s.pts,
+            priority: s.pri,
+            previousStatus: ps,
+            assignee: assignName(s.assign),
+            epic: s.epic || ''
+        });
+        save(); render(); closePanel(); toast('Moved to backlog!');
+    }
 }
 function moveToSprint(id) {
     const i = S.backlog.findIndex(x => x.id === id);
-    if (i >= 0) { const s = S.backlog.splice(i, 1)[0]; s.status = 'todo'; S.stories.push(s); save(); render(); closePanel(); toast('Added to sprint!'); }
+    if (i >= 0) {
+        const s = S.backlog.splice(i, 1)[0]; s.status = 'todo'; S.stories.push(s);
+        pendo.track('story_moved_to_sprint', {
+            storyId: s.id,
+            title: s.title,
+            points: s.pts,
+            priority: s.pri,
+            assignee: assignName(s.assign),
+            epic: s.epic || '',
+            currentSprintStoryCount: S.stories.length,
+            currentSprintTotalPoints: S.stories.reduce((a, x) => a + x.pts, 0)
+        });
+        save(); render(); closePanel(); toast('Added to sprint!');
+    }
 }
 
 // ===== RENDER =====
@@ -496,7 +641,19 @@ function renderRetro() {
             <button onclick="S.retro=S.retro.filter(x=>x.id!==${r.id});save();renderRetro()"><i class="fas fa-trash"></i></button></div></div>`).join('');
     });
 }
-function voteRetro(id) { const r = S.retro.find(x => x.id === id); if (r) { r.votes++; save(); renderRetro(); } }
+function voteRetro(id) {
+    const r = S.retro.find(x => x.id === id);
+    if (r) {
+        r.votes++;
+        pendo.track('retro_note_voted', {
+            noteId: r.id,
+            category: r.cat,
+            newVoteCount: r.votes,
+            noteText: r.text.substring(0, 100)
+        });
+        save(); renderRetro();
+    }
+}
 
 function renderVotes() {
     const el = document.getElementById('vote-list');
@@ -510,6 +667,16 @@ function renderVotes() {
 function toggleVote(sid, tid) {
     if (!S.votes[sid]) S.votes[sid] = {};
     S.votes[sid][tid] = !S.votes[sid][tid];
+    const story = S.backlog.find(x => x.id === sid);
+    pendo.track('sprint_vote_toggled', {
+        storyId: sid,
+        storyTitle: story ? story.title : '',
+        voterId: tid,
+        voteAction: S.votes[sid][tid] ? 'voted' : 'unvoted',
+        totalVotesOnStory: Object.values(S.votes[sid]).filter(Boolean).length,
+        storyPoints: story ? story.pts : 0,
+        storyPriority: story ? story.pri : ''
+    });
     save(); renderVotes();
 }
 
